@@ -15,10 +15,12 @@ setup(
     install_requires=[
         'Jinja2',
         'gevent',
+        'gping==0.2dev2',
         #'args',
     ],
     dependency_links=[
         'https://github.com/kennethreitz/args/tarball/0a6d5eb#egg=args',
+        'https://github.com/fastd-monitor/gping/tarball/integrations#egg=gping-0.2dev1',
         ],
     entry_points={
         'console_scripts': [

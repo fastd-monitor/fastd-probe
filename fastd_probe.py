@@ -7,8 +7,10 @@ import logging
 import tempfile
 import subprocess
 import ConfigParser
-from gevent import monkey
+import gevent
+import gevent.monkey
 from pprint import pprint
+import gping
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
@@ -86,21 +88,32 @@ def vpn_connectivity(configuration):
     # TODO: Wait for signal from fastd "on establish" event.
     time.sleep(1)
 
-    # Run a single ping through the VPN interface
-    interface = configuration['client']['interface']
-    logger.info('Testing connectivity through interface {interface}'.format(interface=interface))
-    ping_cmd = 'ping -c1 -b {interface} google.com'.format(interface=interface)
-    subprocess.call(shlex.split(ping_cmd))
-    #time.sleep(2)
+    try:
+        print 'Sensor run'
+        vpn_connectivity_sensor(configuration)
+        print 'Sensor end'
+    except Exception as ex:
+        logger.error(ex)
 
     # Terminate the fastd process
     logger.info('Terminating fastd process with pid {}'.format(process.pid))
     process.terminate()
 
+def vpn_connectivity_sensor(configuration):
+    # Run a single ping through the VPN interface
+    interface = configuration['client']['interface']
+    local_ip = configuration['network']['local_ip']
+    logger.info('Testing connectivity through interface {interface}'.format(interface=interface))
+    #ping_cmd = 'ping -c1 -b {interface} google.com'.format(interface=interface)
+    #subprocess.call(shlex.split(ping_cmd))
+    gping.ping(['google.com', 'stackoverflow.com', '8.8.8.8'], bind=local_ip)
+    #time.sleep(10)
+
 
 def run():
 
-    monkey.patch_all()
+    gevent.monkey.patch_all()
+
 
     configurations = compute_configurations()
     for configuration in configurations:
