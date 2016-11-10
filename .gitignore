@@ -1,3 +1,5 @@
 /.idea
 /.venv*
 *.egg-info
+*.pyc
+/fastd-probe.ini

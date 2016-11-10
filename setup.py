@@ -14,7 +14,7 @@ setup(
     py_modules=['fastd_probe'],
     install_requires=[
         'Jinja2',
-        #'gevent',
+        'gevent',
         #'args',
     ],
     dependency_links=[
