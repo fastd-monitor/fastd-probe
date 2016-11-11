@@ -1,12 +1,13 @@
 #!/usr/bin/env python
-# coding: utf-8
+# -*- coding: utf-8 -*-
 import os
 from setuptools import setup, find_packages, Command
 
 setup(
     name='fastd-probe',
     version="0.0.1dev1",
-    description='A fastd probe client',
+    description='A fastd probing machinery based on gevent',
+    license="AGPL 3",
     author="Andreas Motl",
     author_email="andreas.motl@elmyra.de",
     url='https://github.com/fastd-monitor/fastd-probe',

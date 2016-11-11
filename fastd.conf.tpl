@@ -21,6 +21,6 @@ on establish "
   route add -net -ifscope $INTERFACE 0.0.0.0 {{ network.remote_ip }}
 
   # Signal connection establishment to fastd-probe
-  curl -XPOST localhost:8912/establish
+  curl --silent -XPOST localhost:8912/establish
 
 ";

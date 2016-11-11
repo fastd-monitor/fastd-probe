@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# (c) 2016 Andreas Motl <andreas.motl@elmyra.de>. Licensed under the AGPL 3.
 import jinja2
 import logging
 import tempfile
@@ -10,72 +11,26 @@ import gevent.event
 import gevent.pywsgi
 import gping
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)-8s: %(message)s')
 logger = logging.getLogger()
 
-def compute_configurations():
 
-    configurations = []
-
-    # Read configuration .ini
-    config = ConfigParser.ConfigParser()
-    config.read('fastd-probe.ini')
-
-    # Get global settings from configuration
-    global_settings = {
-        'fastd': config.get('fastd-probe', 'fastd'),
-        'client': {
-            'secret': config.get('client', 'secret'),
-            'interface': config.get('client', 'interface'),
-            },
-        'network': {
-            'remote_ip': config.get('network', 'remote_ip'),
-            'local_ip': config.get('network', 'local_ip'),
-            },
-    }
-
-    # Get settings for multiple fastd peers from configuration
-    for section in config.sections():
-        if section.startswith('peer:'):
-            peer_settings = {
-                'name': config.get(section, 'name'),
-                'key': config.get(section, 'key'),
-                'hostname': config.get(section, 'hostname'),
-                'port': config.get(section, 'port'),
-                }
-            settings = global_settings.copy()
-            settings.update({'peer': peer_settings})
-            configurations.append(settings)
-
-    return configurations
-
-
-class FastdWrapper(object):
-
-    def make_config(self, settings):
-
-        # Setup Jinja template
-        tpl_raw = file('fastd.conf.tpl').read().decode('utf-8')
-        env = jinja2.Environment(undefined=jinja2.StrictUndefined)
-        template = env.from_string(tpl_raw)
-
-        # Render template
-        return template.render(**settings)
-
-    def start_process(self, fastd, configfile):
-        #./fastd --config etc/fastd.conf
-        #cmd = [fastd, '--config', configfile, '--log-level', 'verbose', '--daemon']
-        cmd = [fastd, '--config', configfile, '--log-level', 'debug2']
-        self.process = subprocess.Popen(cmd, shell=False)
-        return self.process
+class ProcessManager(object):
+    """
+    Manage the fastd client process for connecting to a server peer.
+    Build appropriate fastd configuration file from settings and template.
+    """
 
     def connect(self, configuration):
+        """
+        Create configuration file dynamically and start fastd process.
+        """
 
-        # Write fastd configuration file
+        # Create fastd configuration file
         self.configfile = tempfile.NamedTemporaryFile(suffix='.conf', delete=True)
         logger.info('Writing fastd configuration to {}'.format(self.configfile.name))
 
-        # Render fastd configuration file
+        # Render configuration
         fastd_config = self.make_config(configuration)
         self.configfile.write(fastd_config.encode('utf-8'))
         self.configfile.flush()
@@ -87,10 +42,42 @@ class FastdWrapper(object):
         logger.info('Started fastd process with pid {}'.format(self.process.pid))
 
     def disconnect(self):
+        """
+        Stop fastd process.
+        """
         self.process.terminate()
 
+    def make_config(self, settings):
+        """
+        Create fastd configuration from settings and template.
+        """
 
-class FastdManager(object):
+        # Setup Jinja template
+        tpl_raw = file('fastd.conf.tpl').read().decode('utf-8')
+        env = jinja2.Environment(undefined=jinja2.StrictUndefined)
+        template = env.from_string(tpl_raw)
+
+        # Render template
+        return template.render(**settings)
+
+    def start_process(self, fastd, configfile):
+        """
+        Start fastd process.
+        """
+
+        #./fastd --config etc/fastd.conf
+        #cmd = [fastd, '--config', configfile, '--log-level', 'verbose', '--daemon']
+        #cmd = [fastd, '--config', configfile, '--log-level', 'debug2']
+        cmd = [fastd, '--config', configfile, '--log-level', 'info']
+        #cmd = [fastd, '--config', configfile]
+        self.process = subprocess.Popen(cmd, shell=False)
+        return self.process
+
+
+class TunnelManager(object):
+    """
+    Manage fastd process, trace tunnel establishment and run sensor probe.
+    """
 
     def __init__(self, configuration, timeout=None):
         self.configuration = configuration
@@ -100,7 +87,7 @@ class FastdManager(object):
         self.vpn_connected = gevent.event.Event()
         self.tunnel_established = gevent.event.Event()
 
-        self.fastd = FastdWrapper()
+        self.fastd = ProcessManager()
 
         gevent.spawn(self.start_signalling_server)
         self.greenlet = gevent.spawn(self.start)
@@ -127,6 +114,9 @@ class FastdManager(object):
         self.greenlet.join()
 
     def wait_vpn(self):
+        """
+        Wait until "fastd" signalled the "on establish" event to us.
+        """
         if self.vpn_connected.wait(self.timeout):
             logger.info('VPN connection established')
             self.signalserver.stop()
@@ -142,7 +132,7 @@ class FastdManager(object):
 
     def wait_arp(self):
         """
-        Wait until the ARP table got populated with an appropriate entry from remote_ip
+        Wait until the ARP table got populated with an appropriate "remote_ip" entry.
         """
         interface = self.configuration['client']['interface']
         remote_ip = self.configuration['network']['remote_ip']
@@ -156,6 +146,9 @@ class FastdManager(object):
             gevent.sleep(0.3)
 
     def start_signalling_server(self):
+        """
+        Start a HTTP server waiting for the "on establish" event from the fastd process.
+        """
 
         signalling_port = 8912
 
@@ -172,12 +165,12 @@ class FastdManager(object):
                 start_response('404 Not Found', [('Content-Type', 'text/plain')])
                 return [b'Not Found']
 
+        logger.info('Starting signalling server on port {}'.format(signalling_port))
         self.signalserver = gevent.pywsgi.WSGIServer(('', signalling_port), handler)
         self.signalserver.serve_forever()
-        logger.info('Started signalling server on port {}'.format(signalling_port))
 
 
-class VPNProbe(FastdManager):
+class VPNProbe(TunnelManager):
 
     def run_probe(self):
         self.vpn_connectivity_sensor(self.configuration)
@@ -193,6 +186,43 @@ class VPNProbe(FastdManager):
         #time.sleep(2)
 
 
+def compute_configurations():
+
+    configurations = []
+
+    # Read configuration .ini
+    config = ConfigParser.ConfigParser()
+    config.read('fastd-probe.ini')
+
+    # Get global settings from configuration
+    global_settings = {
+        'fastd': config.get('fastd-probe', 'fastd'),
+        'client': {
+            'secret': config.get('client', 'secret'),
+            'interface': config.get('client', 'interface'),
+            },
+        'network': {
+            'remote_ip': config.get('network', 'remote_ip'),
+            'local_ip': config.get('network', 'local_ip'),
+            },
+        }
+
+    # Get settings for multiple fastd peers from configuration
+    for section in config.sections():
+        if section.startswith('peer:'):
+            peer_settings = {
+                'name': config.get(section, 'name'),
+                'key': config.get(section, 'key'),
+                'hostname': config.get(section, 'hostname'),
+                'port': config.get(section, 'port'),
+                }
+            settings = global_settings.copy()
+            settings.update({'peer': peer_settings})
+            configurations.append(settings)
+
+    return configurations
+
+
 def run():
 
     gevent.monkey.patch_all()
@@ -200,7 +230,7 @@ def run():
     configurations = compute_configurations()
     for configuration in configurations:
 
-        logger.info('Starting probe')
+        logger.info('Starting fastd probe')
         probe = VPNProbe(configuration, timeout=30.0)
         probe.wait()
 
