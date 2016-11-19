@@ -173,16 +173,24 @@ class TunnelManager(object):
 class VPNProbe(TunnelManager):
 
     def run_probe(self):
-        self.vpn_connectivity_sensor(self.configuration)
+        for probe in self.configuration['probes']:
+            if probe['type'] == 'ping':
+                self.ping_probe(self.configuration, probe['targets'])
 
-    def vpn_connectivity_sensor(self, configuration):
+    def ping_probe(self, configuration, targets):
         # Run a single ping through the VPN interface
         interface = configuration['client']['interface']
         local_ip = configuration['network']['local_ip']
         logger.info('Testing connectivity through interface {interface}'.format(interface=interface))
+
+        # Regular commandline ping
         #ping_cmd = 'ping -c1 -b {interface} google.com'.format(interface=interface)
         #subprocess.call(shlex.split(ping_cmd))
-        gping.ping(['google.com', 'stackoverflow.com', '8.8.8.8'], bind=local_ip)
+
+        # Asynchronous ping
+        #gping.ping(['google.com', 'stackoverflow.com', '8.8.8.8'], bind=local_ip)
+        gping.ping(targets, bind=local_ip)
+
         #time.sleep(2)
 
 
@@ -207,6 +215,15 @@ def compute_configurations():
             },
         }
 
+    # Get settings for multiple probes from configuration
+    probes = []
+    for section in config.sections():
+        if section.startswith('probe:'):
+            probe = dict(config.items(section))
+            if probe['type'] == 'ping':
+                probe['targets'] = map(str.strip, probe['targets'].split(','))
+            probes.append(probe)
+
     # Get settings for multiple fastd peers from configuration
     for section in config.sections():
         if section.startswith('peer:'):
@@ -218,6 +235,7 @@ def compute_configurations():
                 }
             settings = global_settings.copy()
             settings.update({'peer': peer_settings})
+            settings.update({'probes': probes})
             configurations.append(settings)
 
     return configurations
