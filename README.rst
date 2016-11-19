@@ -16,9 +16,11 @@ Synopsis
     sudo fastd-probe
 
 
-Example output
-==============
+Example
+=======
 ::
+
+    time sudo fastd-probe
 
     2016-11-11 14:34:17,182 INFO    : Starting fastd probe
     2016-11-11 14:34:17,183 INFO    : Starting signalling server on port 8912
@@ -51,6 +53,12 @@ Example output
 Prerequisites
 *************
 Please make sure ``fastd``, ``curl``, ``arp`` and ``arping`` are installed.
+Also, ``fastd`` requires `TUN/TAP`_ virtual network interfaces.
+While VTun_ should be a commodity on Linux, see `TunTap OSX`_ for an implementation for Mac OS X.
+
+.. _TUN/TAP: https://en.wikipedia.org/wiki/TUN/TAP
+.. _VTun: http://vtun.sourceforge.net/
+.. _TunTap OSX: http://tuntaposx.sourceforge.net/
 
 
 *****
