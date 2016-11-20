@@ -13,6 +13,7 @@ import gevent
 import gevent.monkey
 import gevent.event
 import gevent.pywsgi
+import gevent.subprocess
 import gping
 from appdirs import user_cache_dir
 from ripe.atlas.cousteau.api_listing import AnchorRequest
@@ -76,7 +77,10 @@ class ProcessManager(object):
         #cmd = [fastd, '--config', configfile, '--log-level', 'debug2']
         cmd = [fastd, '--config', configfile, '--log-level', 'info']
         #cmd = [fastd, '--config', configfile]
-        self.process = subprocess.Popen(cmd, shell=False)
+        #self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
+        aproc = AsyncProcess(cmd, '[fastd] ')
+        aproc.capture_output()
+        self.process = aproc.process
         return self.process
 
 
@@ -130,7 +134,10 @@ class TunnelManager(object):
             # Run arping to start ARP discovery
             interface = self.configuration['client']['interface']
             remote_ip = self.configuration['network']['remote_ip']
-            subprocess.call(['arping', '-q', '-c1', '-i', interface, remote_ip])
+            #subprocess.call(['arping', '-q', '-c1', '-i', interface, remote_ip])
+            aproc = AsyncProcess(['arping', '-q', '-c1', '-i', interface, remote_ip], '[arping] ')
+            aproc.capture_output()
+            aproc.wait()
 
         else:
             self.signalserver.stop()
@@ -144,7 +151,10 @@ class TunnelManager(object):
         remote_ip = self.configuration['network']['remote_ip']
         while True:
             # MUST fire AFTER "DEBUG: learned new MAC address de:a5:4e:13:67:04 on peer <server1>"
-            code = subprocess.call(['arp', '-i', interface, remote_ip])
+            #code = subprocess.call(['arp', '-i', interface, remote_ip])
+            aproc = AsyncProcess(['arp', '-i', interface, remote_ip], '[arp] ')
+            aproc.capture_output()
+            code = aproc.wait()
             if code == 0:
                 self.tunnel_established.set()
                 return
@@ -172,7 +182,7 @@ class TunnelManager(object):
                 return [b'Not Found']
 
         logger.info('Starting signalling server on port {}'.format(signalling_port))
-        self.signalserver = gevent.pywsgi.WSGIServer(('', signalling_port), handler)
+        self.signalserver = gevent.pywsgi.WSGIServer(('', signalling_port), handler, log=logger, error_log=logger)
         self.signalserver.serve_forever()
 
 
@@ -318,6 +328,43 @@ class RIPEAtlasAnchors(object):
     def ip_v4_list(self):
         return [item['ip_v4'] for item in self.store]
 
+
+class AsyncProcess(object):
+    """
+    Wrapper for running subprocesses asynchronously.
+    Pumps stdout and stderr output to a logger instance.
+
+    .. seealso::
+
+        https://stackoverflow.com/questions/19497587/get-live-stdout-from-gevent-subprocess/36160200#36160200
+    """
+
+    def __init__(self, cmd, log_prefix=None):
+        self.cmd = cmd
+        self.log_prefix = log_prefix
+        self.process = gevent.subprocess.Popen(self.cmd, stdout=gevent.subprocess.PIPE, stderr=gevent.subprocess.PIPE, shell=False)
+
+    def wait(self, *args, **kwargs):
+        return self.process.wait(*args, **kwargs)
+
+    def capture_output(self):
+        gevent.sleep(0.01)
+        gevent.spawn(self.read_stream, self.process.stdout)
+        gevent.spawn(self.read_stream, self.process.stderr)
+
+    def read_stream(self, stream):
+        try:
+            while not stream.closed:
+                line = stream.readline()
+                if not line:
+                    break
+                line = line.rstrip()
+                if self.log_prefix:
+                    line = self.log_prefix + line
+                logger.info(line)
+        except RuntimeError:
+            # process was terminated abruptly
+            pass
 
 
 def run():
