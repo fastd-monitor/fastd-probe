@@ -1,11 +1,24 @@
 ###########
 fastd-probe
 ###########
-A fastd_ probing machinery based on gevent_. Features:
+A fastd_ probing machinery based on gevent_.
 
-- Test quick network connectivity through a fastd tunnel in less than a second.
-- Use the `List of RIPE Atlas Anchors`_ as ping targets, see also `Checking your Internet Connectivity with RIPE Atlas Anchors`_.
-- Evaluates probe results and panics at an threshold of 75% or more errors.
+
+************
+Introduction
+************
+
+Goals
+=====
+- Conveniently test network connectivity through a fastd tunnel.
+- Act as a foundation for different kinds of network probes.
+
+Features
+========
+- Quick fastd tunnel setup and teardown in less than a second.
+- Optionally use the `List of RIPE Atlas Anchors`_ as targets for ping probes,
+  see also `Checking your Internet Connectivity with RIPE Atlas Anchors`_.
+- Evaluate probe results and panics at an threshold of 75% or more errors.
 
 .. _fastd: https://fastd.readthedocs.io/
 .. _gevent: http://www.gevent.org
@@ -20,6 +33,19 @@ Synopsis
 
     time sudo fastd-probe
 
+Please also have a look at the provided example configuration file "`fastd-probe.example.ini`_".
+
+.. _fastd-probe.example.ini: https://github.com/fastd-monitor/fastd-probe/blob/master/fastd-probe.example.ini
+
+
+********
+Examples
+********
+These two examples demonstrate a "success" and a "failure" case.
+Both use a ping probe configured with ``targets = RIPE-ATLAS-ANCHORS``,
+checking connectivity against all 228 RIPE Atlas Anchors as of 2016-11-20.
+
+----
 
 .. figure:: https://asciinema.org/a/93575.png
     :alt: fastd-probe success
@@ -27,6 +53,7 @@ Synopsis
 
     fastd-probe success: https://asciinema.org/a/93575
 
+----
 
 .. figure:: https://asciinema.org/a/93576.png
     :alt: fastd-probe failure
