@@ -16,10 +16,12 @@ setup(
     install_requires=[
         'Jinja2',
         'gevent',
-        'gping==0.2dev2',
+        'gping==0.2dev3',
         'ripe.atlas.cousteau',
         'appdirs',
         'json-store',
+        'progressbar2',
+        'colorama',
         #'args',
     ],
     dependency_links=[

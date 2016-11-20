@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 # (c) 2016 Andreas Motl <andreas.motl@elmyra.de>. Licensed under the AGPL 3.
 import os
+import sys
 import types
 import jinja2
 import logging
 import tempfile
 import datetime
+import colorama
 import json_store
 import subprocess
 import ConfigParser
@@ -17,6 +19,7 @@ import gevent.subprocess
 import gping
 from appdirs import user_cache_dir
 from ripe.atlas.cousteau.api_listing import AnchorRequest
+from progressbar import ProgressBar
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)-8s: %(message)s')
 logger = logging.getLogger()
@@ -53,6 +56,8 @@ class ProcessManager(object):
         Stop fastd process.
         """
         self.process.terminate()
+        self.process.wait()
+        logger.info('Disconnected fastd')
 
     def make_config(self, settings):
         """
@@ -89,7 +94,7 @@ class TunnelManager(object):
     Manage fastd process, trace tunnel establishment and run sensor probe.
     """
 
-    def __init__(self, configuration, probe_callback, timeout=None):
+    def __init__(self, configuration, probe_callback=None, timeout=None):
         logger.info('Starting fastd tunnel')
         self.configuration = configuration
         self.probe_callback = probe_callback
@@ -117,10 +122,17 @@ class TunnelManager(object):
             logger.info('Network tunnel fully established')
 
             # Run sensor probe
-            self.probe_callback()
+            try:
+                if self.probe_callback and callable(self.probe_callback):
+                    self.probe_callback()
 
-        # Shutdown fastd client
-        self.fastd.disconnect()
+            finally:
+                # Shutdown fastd client
+                self.fastd.disconnect()
+
+        else:
+            # Shutdown fastd client
+            self.fastd.disconnect()
 
     def wait(self):
         self.greenlet.join()
@@ -131,7 +143,9 @@ class TunnelManager(object):
         """
         if self.vpn_connected.wait(self.timeout):
             logger.info('VPN connection established')
-            self.signalserver.stop()
+
+            #self.signalserver.stop()
+            gevent.spawn_later(0.3, self.signalserver.stop)
 
             # Run arping to start ARP discovery
             interface = self.configuration['client']['interface']
@@ -194,13 +208,16 @@ class NetworkProbe(object):
         logger.info('Starting network probe')
         self.configuration = configuration
         self.timeout = timeout or 5.0
+        self.count = 0
+        self.success = False
 
     def run(self):
         for probe in self.configuration['probes']:
             if probe['type'] == 'ping':
-                self.ping(self.configuration, probe['targets'])
+                gp = self.ping_probe(self.configuration, probe['targets'])
+                self.ping_report(gp)
 
-    def ping(self, configuration, targets):
+    def ping_probe(self, configuration, targets):
         # Run a single ping through the VPN interface
         interface = configuration['client']['interface']
         local_ip = configuration['network']['local_ip']
@@ -210,9 +227,43 @@ class NetworkProbe(object):
         #ping_cmd = 'ping -c1 -b {interface} google.com'.format(interface=interface)
         #subprocess.call(shlex.split(ping_cmd))
 
+        progress = ProgressBar(max_value=len(targets), term_width=120)
+        self.count = 0
+        def receiver(ping):
+            self.count += 1
+            progress.update(self.count)
+
         # Asynchronous ping
         #gping.ping(['google.com', 'stackoverflow.com', '8.8.8.8'], bind=local_ip)
-        gping.ping(targets, bind=local_ip)
+        return gping.ping(targets, timeout=2.0, max_outstanding=50, bind=local_ip, callback=receiver)
+
+    def ping_report(self, gp):
+
+        total     = len(gp.results)
+        successes = len([True for result in gp.results if result['success']])
+        errors    = len([True for result in gp.results if result['error']])
+
+        msg_successes = colorama.Fore.CYAN + str(successes) + colorama.Style.RESET_ALL
+        msg_errors    = colorama.Fore.RED  + str(errors)    + colorama.Style.RESET_ALL
+
+        error_ratio = float(errors) / float(total)
+        details_human = 'This is an error ratio of {}%.'.format(round(error_ratio * 100, 2))
+
+        panic = False
+        threshold = 0.75
+        if error_ratio >= 0.75:
+            panic = True
+
+        if panic:
+            outcome_human = colorama.Fore.RED + "Failure. PANIC!"
+        else:
+            outcome_human = colorama.Fore.GREEN + "Success. Don't panic."
+            self.success = True
+
+        message = 'Result:\nThe PING probe collected {} successful responses and {} errors. {}\n{}'.format(msg_successes, msg_errors, details_human, outcome_human)
+        message += colorama.Style.RESET_ALL
+        print
+        print(message)
 
         #time.sleep(2)
 
@@ -381,12 +432,19 @@ def run():
     gevent.monkey.patch_all()
 
     configurations = compute_configurations()
+    outcomes = []
     for configuration in configurations:
 
         probe = NetworkProbe(configuration, timeout=10.0)
+        #tunnel = TunnelManager(configuration)
         tunnel = TunnelManager(configuration, probe.run, timeout=30.0)
         tunnel.wait()
 
+        outcomes.append(probe.success)
+
+    success_total = all(outcomes)
+    if not success_total:
+        sys.exit(2)
 
 if __name__ == '__main__':
     logger.warning('Nothing here')

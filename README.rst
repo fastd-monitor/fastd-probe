@@ -3,12 +3,13 @@ fastd-probe
 ###########
 A fastd_ probing machinery based on gevent_. Features:
 
-- Test network connectivity through a fastd tunnel in less than a second.
-- Use list of RIPE Atlas Anchors as ping targets, see also `Checking your Internet Connectivity with RIPE Atlas Anchors`_.
-
+- Test quick network connectivity through a fastd tunnel in less than a second.
+- Use the `List of RIPE Atlas Anchors`_ as ping targets, see also `Checking your Internet Connectivity with RIPE Atlas Anchors`_.
+- Evaluates probe results and panics at an threshold of 75% or more errors.
 
 .. _fastd: https://fastd.readthedocs.io/
 .. _gevent: http://www.gevent.org
+.. _List of RIPE Atlas Anchors: https://atlas.ripe.net/anchors/list/
 .. _Checking your Internet Connectivity with RIPE Atlas Anchors: https://labs.ripe.net/Members/stephane_bortzmeyer/checking-your-internet-connectivity-with-ripe-atlas-anchors
 
 
@@ -17,40 +18,21 @@ Synopsis
 ********
 ::
 
-    sudo fastd-probe
-
-
-Example
-=======
-::
-
     time sudo fastd-probe
 
-    2016-11-11 14:34:17,182 INFO    : Starting fastd probe
-    2016-11-11 14:34:17,183 INFO    : Starting signalling server on port 8912
-    2016-11-11 14:34:17,191 INFO    : Writing fastd configuration to /tmp/tmpYQNYGY.conf
-    2016-11-11 14:34:17,196 INFO    : Connecting to fastd service at fastd.example.org
-    2016-11-11 14:34:17,226 INFO    : Started fastd process with pid 55468
-    2016-11-11 14:34:17 +0100 --- Info: fastd v18-9-g2fa2187-dirty starting
-    2016-11-11 14:34:17 +0100 --- Info: connection with <server1> established.
-    192.168.111.1 (192.168.111.1) -- no entry on tap0
-    add net 0.0.0.0: gateway 192.168.111.1
-    2016-11-11 14:34:17,342 INFO    : Received "on establish" event from fastd
-    2016-11-11 14:34:17,343 INFO    : VPN connection established
-    ? (192.168.111.1) at 3a:25:53:fb:52:b4 on tap0 ifscope [ethernet]
-    2016-11-11 14:34:17,606 INFO    : Network tunnel fully established
-    2016-11-11 14:34:17,606 INFO    : Testing connectivity through interface tap0
-    IP                  Delay          Hostname                                Message
-    85.182.250.153      0.053348       google.com
-    151.101.1.69        0.050595       stackoverflow.com
-    8.8.8.8             0.054271       8.8.8.8
 
-    2016-11-11 14:34:17 +0100 --- Info: terminating fastd
-    2016-11-11 14:34:17 +0100 --- Info: connection with <server1> disestablished.
+.. figure:: https://asciinema.org/a/93575.png
+    :alt: fastd-probe success
+    :target: https://asciinema.org/a/93575
 
-    real    0m0.803s
-    user    0m0.368s
-    sys     0m0.112s
+    fastd-probe success: https://asciinema.org/a/93575
+
+
+.. figure:: https://asciinema.org/a/93576.png
+    :alt: fastd-probe failure
+    :target: https://asciinema.org/a/93576
+
+    fastd-probe failure: https://asciinema.org/a/93576
 
 
 *************
