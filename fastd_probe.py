@@ -272,13 +272,15 @@ def compute_configurations():
 
 class JSONCache(object):
 
-    def __init__(self, appname, filename, callback, ttl=86400):
+    def __init__(self, appname, filename, callback, ttl=None):
         self.appname = appname
         self.filename = filename
         self.callback = callback
-        self.ttl = ttl
+        self.ttl = ttl or 300
         self.file = None
-        self.cache = self.setup()
+        self.slot = 'results'
+        self.cache = {self.slot: None}
+        self.setup()
 
     def setup(self):
         cache_dir = user_cache_dir(self.appname)
@@ -286,14 +288,14 @@ class JSONCache(object):
             os.makedirs(cache_dir)
         self.file = os.path.join(cache_dir, self.filename)
         logger.info('Using cache for {}: {}'.format(self.appname, self.file))
-        return json_store.open(self.file)
+        self.cache = json_store.open(self.file)
 
     def get(self):
-        return self.cache['results']
+        return self.cache[self.slot]
 
     def refresh(self):
-        if self.expired() or 'results' not in self.cache:
-            self.cache.update({'results': self.callback()})
+        if self.expired() or self.slot not in self.cache:
+            self.cache.update({self.slot: self.callback()})
             self.cache.sync()
 
     def mtime(self):
