@@ -89,8 +89,10 @@ class TunnelManager(object):
     Manage fastd process, trace tunnel establishment and run sensor probe.
     """
 
-    def __init__(self, configuration, timeout=None):
+    def __init__(self, configuration, probe_callback, timeout=None):
+        logger.info('Starting fastd tunnel')
         self.configuration = configuration
+        self.probe_callback = probe_callback
         self.timeout = timeout or 5.0
 
         self.signalserver = None
@@ -115,7 +117,7 @@ class TunnelManager(object):
             logger.info('Network tunnel fully established')
 
             # Run sensor probe
-            self.run_probe()
+            self.probe_callback()
 
         # Shutdown fastd client
         self.fastd.disconnect()
@@ -186,14 +188,19 @@ class TunnelManager(object):
         self.signalserver.serve_forever()
 
 
-class VPNProbe(TunnelManager):
+class NetworkProbe(object):
 
-    def run_probe(self):
+    def __init__(self, configuration, timeout=None):
+        logger.info('Starting network probe')
+        self.configuration = configuration
+        self.timeout = timeout or 5.0
+
+    def run(self):
         for probe in self.configuration['probes']:
             if probe['type'] == 'ping':
-                self.ping_probe(self.configuration, probe['targets'])
+                self.ping(self.configuration, probe['targets'])
 
-    def ping_probe(self, configuration, targets):
+    def ping(self, configuration, targets):
         # Run a single ping through the VPN interface
         interface = configuration['client']['interface']
         local_ip = configuration['network']['local_ip']
@@ -374,9 +381,9 @@ def run():
     configurations = compute_configurations()
     for configuration in configurations:
 
-        logger.info('Starting fastd probe')
-        probe = VPNProbe(configuration, timeout=30.0)
-        probe.wait()
+        probe = NetworkProbe(configuration, timeout=10.0)
+        tunnel = TunnelManager(configuration, probe.run, timeout=30.0)
+        tunnel.wait()
 
 
 if __name__ == '__main__':
