@@ -42,6 +42,7 @@ Please also have a look at the provided example configuration file "`fastd-probe
 Examples
 ********
 These two examples demonstrate a "success" and a "failure" case.
+
 Both use a ping probe configured with ``targets = RIPE-ATLAS-ANCHORS``,
 checking connectivity against all 228 RIPE Atlas Anchors as of 2016-11-20.
 
