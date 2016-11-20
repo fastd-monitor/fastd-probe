@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
 # (c) 2016 Andreas Motl <andreas.motl@elmyra.de>. Licensed under the AGPL 3.
+import os
+import types
 import jinja2
 import logging
 import tempfile
+import datetime
+import json_store
 import subprocess
 import ConfigParser
 import gevent
@@ -10,6 +14,8 @@ import gevent.monkey
 import gevent.event
 import gevent.pywsgi
 import gping
+from appdirs import user_cache_dir
+from ripe.atlas.cousteau.api_listing import AnchorRequest
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)-8s: %(message)s')
 logger = logging.getLogger()
@@ -221,7 +227,13 @@ def compute_configurations():
         if section.startswith('probe:'):
             probe = dict(config.items(section))
             if probe['type'] == 'ping':
-                probe['targets'] = map(str.strip, probe['targets'].split(','))
+                targets = probe['targets']
+                if targets == 'RIPE-ATLAS-ANCHORS':
+                    targets = RIPEAtlasAnchors(cached=True).ip_v4_list()
+                elif type(targets) in types.StringTypes:
+                    targets = map(str.strip, targets.split(','))
+                probe['targets'] = targets
+                logger.info('Added PING probe with #{} targets'.format(len(targets)))
             probes.append(probe)
 
     # Get settings for multiple fastd peers from configuration
@@ -239,6 +251,73 @@ def compute_configurations():
             configurations.append(settings)
 
     return configurations
+
+
+class JSONCache(object):
+
+    def __init__(self, appname, filename, callback, ttl=86400):
+        self.appname = appname
+        self.filename = filename
+        self.callback = callback
+        self.ttl = ttl
+        self.file = None
+        self.cache = self.setup()
+
+    def setup(self):
+        cache_dir = user_cache_dir(self.appname)
+        if not os.path.exists(cache_dir):
+            os.makedirs(cache_dir)
+        self.file = os.path.join(cache_dir, self.filename)
+        logger.info('Using cache for {}: {}'.format(self.appname, self.file))
+        return json_store.open(self.file)
+
+    def get(self):
+        return self.cache['results']
+
+    def refresh(self):
+        if self.expired() or 'results' not in self.cache:
+            self.cache.update({'results': self.callback()})
+            self.cache.sync()
+
+    def mtime(self):
+        try:
+            mtime = os.path.getmtime(self.file)
+        except OSError:
+            mtime = 0
+        last_modified_date = datetime.datetime.fromtimestamp(mtime)
+        return last_modified_date
+
+    def expired(self):
+        now = datetime.datetime.now()
+        if now - self.mtime() > datetime.timedelta(seconds = self.ttl):
+            return True
+        else:
+            return False
+
+
+class RIPEAtlasAnchors(object):
+
+    def __init__(self, cached=False, ttl=86400):
+        self.cached = cached
+        self.ttl = ttl
+        self.store = []
+        self.cache = JSONCache('fastd-probe', 'ripe-atlas-anchors.json', self.fetch, ttl=ttl)
+        self.load()
+
+    def load(self):
+        if self.cached:
+            self.cache.refresh()
+            self.store = self.cache.get()
+        else:
+            self.store = self.fetch()
+
+    def fetch(self):
+        logger.info('Fetching list of RIPE Atlas Anchors')
+        return list(AnchorRequest())
+
+    def ip_v4_list(self):
+        return [item['ip_v4'] for item in self.store]
+
 
 
 def run():

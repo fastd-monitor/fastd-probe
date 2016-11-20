@@ -17,6 +17,9 @@ setup(
         'Jinja2',
         'gevent',
         'gping==0.2dev2',
+        'ripe.atlas.cousteau',
+        'appdirs',
+        'json-store',
         #'args',
     ],
     dependency_links=[

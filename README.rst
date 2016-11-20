@@ -1,11 +1,15 @@
 ###########
 fastd-probe
 ###########
-A fastd_ probing machinery based on gevent_.
-Test network connectivity through a fastd tunnel in less than a second.
+A fastd_ probing machinery based on gevent_. Features:
+
+- Test network connectivity through a fastd tunnel in less than a second.
+- Use list of RIPE Atlas Anchors as ping targets, see also `Checking your Internet Connectivity with RIPE Atlas Anchors`_.
+
 
 .. _fastd: https://fastd.readthedocs.io/
 .. _gevent: http://www.gevent.org
+.. _Checking your Internet Connectivity with RIPE Atlas Anchors: https://labs.ripe.net/Members/stephane_bortzmeyer/checking-your-internet-connectivity-with-ripe-atlas-anchors
 
 
 ********
